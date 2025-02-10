@@ -1,75 +1,123 @@
-from flask import Flask, render_template, request, jsonify
-from scraper import download_pdf, extract_title
-from searchbook import search_book_by_title_openlibrary
-# from prodomate import add_listing_sandbox
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
 import os
+import json
+from datetime import datetime, timedelta
+import requests
+import secrets
+import hashlib
+import base64
+import uvicorn
+from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route('/', methods=['GET'])
-def index():
-    return render_template('index.html')
+# Load environment variables
+load_dotenv()
 
-@app.route('/process_book', methods=['POST'])
-def process_book():
+# Configuration
+CLIENT_ID = os.getenv("ETSY_CLIENT_ID")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://etsy-oauth.onrender.com/callback")
+SCOPES = ["shops_r", "shops_w", "listings_r", "listings_w", "listings_d"]
+
+# Store OAuth state
+class OAuthState:
+    code_verifier = None
+    code_challenge = None
+    state = None
+
+oauth_state = OAuthState()
+
+# Add security middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8000",
+        "http://localhost:3000",  # If you have a frontend running on port 3000
+        "http://127.0.0.1:8000"
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+def start_auth():
+    """Start the OAuth flow"""
+    # Generate new PKCE values and state for this request
+    oauth_state.code_verifier = secrets.token_urlsafe(32)
+    oauth_state.code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(oauth_state.code_verifier.encode('ascii')).digest()
+    ).decode('ascii').rstrip('=')
+    oauth_state.state = secrets.token_urlsafe(16)
+
+    auth_url = (
+        'https://www.etsy.com/oauth/connect'
+        f'?response_type=code'
+        f'&redirect_uri={REDIRECT_URI}'
+        f'&client_id={CLIENT_ID}'
+        f'&scope={" ".join(SCOPES)}'
+        '&code_challenge_method=S256'
+        f'&code_challenge={oauth_state.code_challenge}'
+        f'&state={oauth_state.state}'
+    )
+    return RedirectResponse(auth_url)
+
+@app.get("/callback")
+async def callback(code: str = None, state: str = None, error: str = None):
+    """Handle the OAuth callback"""
+    if error:
+        return {"error": error}
+        
+    if not code:
+        return {"error": "No authorization code received"}
+    
+    if state != oauth_state.state:
+        return {"error": "Invalid state parameter"}
+    
     try:
-        # Get the PDFDrive URL from the form
-        pdf_url = request.form.get('pdf_url')
-        
-        # First extract the title
-        title = extract_title(pdf_url)
-        if not title:
-            return jsonify({'status': 'error', 'message': 'Failed to extract title'})
-        
-        # Download the PDF
-        # filename = download_pdf(pdf_url)
-        # if not filename:
-        #     return jsonify({'status': 'error', 'message': 'Failed to download PDF'})
-        
-        # Get additional book metadata from OpenLibrary
-        book_metadata = search_book_by_title_openlibrary(title)
-        
-        # Prepare Etsy listing data
-        description = f"Digital PDF Book: {title}\n\n"
-        if book_metadata['status'] == 'success':
-            description += f"Author: {', '.join(book_metadata['data']['authors'])}\n"
-            description += f"Published: {book_metadata['data']['publish_year']}\n"
-            if book_metadata['data']['subjects']:
-                description += f"\nSubjects: {', '.join(book_metadata['data']['subjects'][:5])}"
-        
-        # Create Etsy listing data
-        etsy_data = {
-            "status": "success",
-            "message": "Book processed successfully!",
-            "title": title[:140],  # Etsy title limit
-            "description": description,
-            "price": 9.99,  # Default price
-            "quantity": 999,
-            "materials": ["digital", "PDF", "ebook"],
-            "tags": ["digital", "ebook", "PDF", "instant download", "digital download"],
-            "filename": title,
-            "book_details": book_metadata['data'] if book_metadata['status'] == 'success' else None
+        # Exchange authorization code for access token
+        token_url = 'https://api.etsy.com/v3/public/oauth/token'
+        data = {
+            'grant_type': 'authorization_code',
+            'client_id': CLIENT_ID,
+            'redirect_uri': REDIRECT_URI,
+            'code': code,
+            'code_verifier': oauth_state.code_verifier
         }
-
-        return jsonify(etsy_data)
         
-        # etsy_result = add_listing_sandbox(**etsy_data)
+        response = requests.post(token_url, data=data)
+        response.raise_for_status()
         
-        # if etsy_result.get('status') == 'success':
-        #     return jsonify({
-        #         'status': 'success',
-        #         'message': 'Book processed and listed successfully!',
-        #         'book_details': book_metadata['data'] if book_metadata['status'] == 'success' else None,
-        #         'etsy_listing': etsy_result['data']
-        #     })
-        # else:
-        #     return jsonify({
-        #         'status': 'error',
-        #         'message': f"Failed to create Etsy listing: {etsy_result.get('message')}"
-        #     })
-            
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        tokens = response.json()
+        
+        # Save tokens to .env file
+        # Read existing content
+        with open('.env', 'r') as file:
+            lines = file.readlines()
 
-if __name__ == '__main__':
-    app.run(debug=True) 
+        # Remove existing tokens if present
+        lines = [line for line in lines if not line.startswith(('ETSY_ACCESS_TOKEN=', 'ETSY_REFRESH_TOKEN='))]
+
+        # Write back all content plus new tokens
+        with open('.env', 'w') as file:
+            file.writelines(lines)
+            file.write(f'ETSY_ACCESS_TOKEN={tokens["access_token"]}\n')
+            file.write(f'ETSY_REFRESH_TOKEN={tokens["refresh_token"]}\n')
+        
+        return {"message": "Authorization successful! You can close this window."}
+        
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e), "details": e.response.text if hasattr(e, 'response') else None}
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    print("""
+=== Etsy App Authorization ===
+1. Open your browser and go to: http://localhost:8000
+2. Log in to Etsy if needed
+3. Authorize the app
+4. The tokens will be automatically saved to your .env file
+""")
+    uvicorn.run(app, host="0.0.0.0", port=port) 

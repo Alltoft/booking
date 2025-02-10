@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDFDrive to Etsy Listing</title>
+    <title>Book to Etsy Listing</title>
     <style>
         :root {
             --primary-color: #F56400;
@@ -45,7 +45,7 @@
             margin-bottom: 20px;
         }
 
-        input[type="url"] {
+        input[type="text"] {
             width: 100%;
             padding: 12px;
             border: 2px solid #ddd;
@@ -54,7 +54,7 @@
             transition: border-color 0.3s ease;
         }
 
-        input[type="url"]:focus {
+        input[type="text"]:focus {
             border-color: var(--primary-color);
             outline: none;
         }
@@ -116,12 +116,12 @@
 </head>
 <body>
     <div class="container">
-        <h1>PDFDrive to Etsy Listing</h1>
+        <h1>Book to Etsy Listing</h1>
         
         <form id="bookForm">
             <div class="form-group">
-                <input type="url" id="pdfUrl" name="pdf_url" 
-                       placeholder="Paste PDFDrive book URL here" required>
+                <input type="text" id="bookTitle" name="book_title" 
+                       placeholder="Enter book title" required>
             </div>
             <button type="submit">Process Book</button>
         </form>
