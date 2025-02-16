@@ -1,57 +1,106 @@
 @echo off
+setlocal EnableDelayedExpansion
+
+REM Check if running as administrator
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo Please run this script as Administrator
+    pause
+    exit /b 1
+)
+
+REM Install Chocolatey if missing
+where choco >nul 2>&1
+if %errorLevel% neq 0 (
+    echo Installing Chocolatey...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy AllSigned -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+)
+
 REM Create .env file with necessary variables
 echo Creating .env file...
-(
-  echo ETSY_CLIENT_ID=your_client_id_here
-  echo ETSY_ACCESS_TOKEN=your_access_token_here
-  echo ETSY_REFRESH_TOKEN=your_refresh_token_here
-  echo PORT=8000
-) > .env
+if exist .env (
+    echo .env file already exists. Skipping creation.
+) else (
+    set /p ETSY_CLIENT_ID="Enter ETSY_CLIENT_ID: "
+    set /p ETSY_ACCESS_TOKEN="Enter ETSY_ACCESS_TOKEN: "
+    set /p ETSY_REFRESH_TOKEN="Enter ETSY_REFRESH_TOKEN: "
+    (
+        echo ETSY_CLIENT_ID=%ETSY_CLIENT_ID%
+        echo ETSY_ACCESS_TOKEN=%ETSY_ACCESS_TOKEN%
+        echo ETSY_REFRESH_TOKEN=%ETSY_REFRESH_TOKEN%
+        echo PORT=8000
+    ) > .env
+)
 
-REM update
-echo Updating...
-apt update
-REM Upgrade
-echo Upgrading...
-apt upgrade
-REM Install Python
-echo Installing Python...
-choco install python -y
-REM Install Node.js
-echo Installing Node.js...
-choco install nodejs -y
-REM Create a virtual environment
-echo Creating a virtual environment...
-python -m venv venv
-REM activate the virtual environment
-echo Activating the virtual environment...
-venv\Scripts\activate
+REM Install Python if not installed
+where python >nul 2>&1
+if %errorLevel% neq 0 (
+    echo Installing Python...
+    choco install python -y
+    set PATH=%PATH%;C:\Python311\Scripts;C:\Python311
+)
+
+REM Install Node.js if not installed
+where node >nul 2>&1
+if %errorLevel% neq 0 (
+    echo Installing Node.js...
+    choco install nodejs -y
+    set PATH=%PATH%;C:\Program Files\nodejs
+)
+
+REM Check if requirements.txt exists
+if not exist requirements.txt (
+    echo requirements.txt not found!
+    pause
+    exit /b 1
+)
+
+REM Create and activate virtual environment
+if not exist venv (
+    echo Creating virtual environment...
+    python -m venv venv
+)
+
+call venv\Scripts\activate
+if %errorLevel% neq 0 (
+    echo Failed to activate virtual environment
+    pause
+    exit /b 1
+)
+
 REM Install Python dependencies
 echo Installing Python dependencies...
 pip install -r requirements.txt
 
-REM Navigate to the frontend directory (assuming it's named 'my-app')
-echo Setting up the frontend...
+REM Check if frontend directory exists
+if not exist my-app (
+    echo Frontend directory 'my-app' not found!
+    pause
+    exit /b 1
+)
+
+REM Setup frontend
 cd my-app
-
-REM Install Node.js dependencies
 echo Installing Node.js dependencies...
-npm install
+call npm install
+if %errorLevel% neq 0 (
+    echo Failed to install Node.js dependencies
+    cd ..
+    pause
+    exit /b 1
+)
 
-REM Build the frontend (if needed)
 echo Building the frontend...
-npm run build
-
-REM Return to the root directory
+call npm run build
 cd ..
 
-REM Run the FastAPI backend
+REM Start servers
 echo Starting the FastAPI backend...
-start python app.py
+start cmd /k "venv\Scripts\activate && python app.py"
 
-REM Run the frontend development server
 echo Starting the frontend development server...
 cd my-app
-start npm run dev
+start cmd /k "npm run dev"
 
 echo Setup complete! Check the opened terminals for the backend and frontend servers.
+pause
