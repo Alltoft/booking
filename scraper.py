@@ -53,6 +53,7 @@ def download_pdf(book_url):
 
         # Step 3: Extract the final PDF URL from the download button
         download_link = broken_soup.find('a', {'class': 'btn-user'})
+        print("I am here: ", download_link)
         if not download_link:
             return None
 
@@ -91,3 +92,4 @@ def extract_title(book_url):
         # Extract title
         title = soup.find('h1').text.strip()
         return title
+    

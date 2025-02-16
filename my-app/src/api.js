@@ -14,7 +14,7 @@ export const api = {
     const response = await axios.get(`${BASE_URL}/search-book`, {
       params: { title }
     });
-    return response.data;
+    return response;
   },
 
   async generateDescription(book_details) {
@@ -54,6 +54,11 @@ export const api = {
     const response = await axios.get(`${BASE_URL}/delete-pdf`, {
       params: { file_name: fileName }
     });
+    return response.data;
+  },
+
+  async refreshToken() {
+    const response = await axios.get(`${BASE_URL}/refresh`);
     return response.data;
   }
 };

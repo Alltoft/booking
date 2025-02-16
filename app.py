@@ -108,8 +108,8 @@ async def callback(code: str = None, state: str = None, error: str = None):
         except:
             pass
         
-        return {"message": "Authorization successful! You can close this window."}
-        
+        return {"message": "Authorization successful! rj3 fin knti w dir refresh."}
+
     except requests.exceptions.RequestException as e:
         return {"error": str(e), "details": e.response.text if hasattr(e, 'response') else None}
     
@@ -260,7 +260,7 @@ def create_listing(shop_id, title, description):
 #                                                                     }
 
 @app.get("/get-book-pdf")
-def get_book_pdf(book_url):
+def get_book_pdf(book_url="https://www.pdfdrive.com/living-in-the-light-a-guide-to-personal-transformation-e10172273.html"):
     try:
         # Download PDF
         pdf = download_pdf(book_url)
@@ -363,6 +363,8 @@ async def upload_listing_file(shop_id, listing_id, file_name):
         with open(file_name, 'rb') as file:
             file_data = file.read()
 
+        print('I reached here')
+
         file_upload_url = f'https://openapi.etsy.com/v3/application/shops/{shop_id}/listings/{listing_id}/files'
         headers = {
             'Authorization': f'Bearer {access_token}',
@@ -393,7 +395,7 @@ async def upload_listing_file(shop_id, listing_id, file_name):
         return {"error": str(e), "details": e.response.text if hasattr(e, 'response') else None}
     
 @app.get("/delete-pdf")
-def delete_pdf(file_name='Living_in_the_Light:_A_guide_to_personal_transformation.pdf'):
+def delete_pdf(file_name):
     try:
         os.remove(file_name)
         return {"message": "PDF deleted successfully!"}
@@ -441,7 +443,7 @@ def delete_listing():
         
         access_token = next(line for line in lines if line.startswith('ETSY_ACCESS_TOKEN=')).split('=')[1].strip()
 
-        delete_url = f'https://openapi.etsy.com/v3/application/listings/1871435245'
+        delete_url = f'https://openapi.etsy.com/v3/application/listings/1873814919'
         headers = {
             'Authorization': f'Bearer {access_token}',
             'x-api-key': CLIENT_ID
